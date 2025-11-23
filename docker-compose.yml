@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  llama-factory:
+    image: hiyouga/llamafactory:latest
+    container_name: llama-factory
+    runtime: nvidia
+    
+    environment:
+      - PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    
+    ports:
+      - "7860:7860"
+    
+    volumes:
+      # 数据集挂载
+      - ./data:/app/data
+      # 输出模型挂载
+      - ./output:/app/output
+      # 预加载模型挂载
+      - ./models:/app/models
+    
+    shm_size: 16gb
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    command: llamafactory-cli webui
+    
+    # 自动重启
+    restart: unless-stopped

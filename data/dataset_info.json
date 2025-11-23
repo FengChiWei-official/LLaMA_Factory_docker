@@ -1,0 +1,17 @@
+{
+  "identity": {
+    "file_name": "identity.json",
+    "columns": {
+      "prompt": "instruction",
+      "response": "output"
+    }
+  },
+  "my_custom_dataset": {
+    "file_name": "my_data.json",
+    "columns": {
+      "prompt": "instruction",
+      "query": "input",
+      "response": "output"
+    }
+  }
+}
