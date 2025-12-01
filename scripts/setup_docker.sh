@@ -1,7 +1,7 @@
 #!/bin/bash
 # setup_docker.sh - Docker 环境初始化脚本
 # 支持 Ubuntu, CentOS, Arch Linux (yay/paru) 等发行版
-# 用法: bash setup_docker.sh [包管理器]
+# 用法: bash setup_docker.sh [--cpu] [包管理器]
 # 示例:
 #   bash setup_docker.sh                 # 自动检测
 #   bash setup_docker.sh apt             # 使用 apt (Debian/Ubuntu)
@@ -23,6 +23,7 @@ show_help() {
 
 选项:
     -h, --help          显示此帮助信息
+    --cpu               跳过 GPU 相关依赖安装与检测（仅 CPU 环境）
     apt                 使用 apt 包管理器 (Debian/Ubuntu)
     yum                 使用 yum 包管理器 (CentOS/RHEL)
     pacman              使用 pacman 包管理器 (Arch Linux)
@@ -37,6 +38,8 @@ show_help() {
     bash setup_docker.sh pacman          # 使用 pacman
     bash setup_docker.sh yay             # 使用 yay
     bash setup_docker.sh paru            # 使用 paru
+    bash setup_docker.sh --cpu           # 跳过 GPU 相关依赖 (只安装 CPU 运行所需依赖)
+    bash setup_docker.sh --cpu apt       # 同时指定 --cpu 和包管理器
 EOF
 }
 
@@ -163,10 +166,14 @@ install_deps_arch() {
         git \
         gnupg
     
-    # 对于 nvidia-container-toolkit，使用 AUR
+    # 对于 nvidia-container-toolkit，使用 AUR（除非指定 --cpu）
     if [ "$aur_helper" != "" ]; then
-        echo "从 AUR 安装 nvidia-container-toolkit..."
-        $aur_helper -S --noconfirm nvidia-container-toolkit
+        if [ "$SKIP_GPU" -eq 0 ]; then
+            echo "从 AUR 安装 nvidia-container-toolkit..."
+            $aur_helper -S --noconfirm nvidia-container-toolkit
+        else
+            echo "⚠ 跳过 nvidia-container-toolkit 安装（--cpu 指定）"
+        fi
     fi
     
     # 启动 Docker 服务
@@ -276,14 +283,33 @@ configure_docker_nvidia() {
 # 主程序开始
 # ============================================================
 
-# 处理命令行参数
-PKG_MGR="${1:-}"
+# 处理命令行参数（支持 --cpu 跳过 GPU 相关检查及安装）
+PKG_MGR=""
+SKIP_GPU=0
 
-# 显示帮助信息
-if [ "$PKG_MGR" = "-h" ] || [ "$PKG_MGR" = "--help" ]; then
-    show_help
-    exit 0
-fi
+# 解析位置参数，允许同时使用 --cpu 与包管理器参数，顺序不限
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --cpu)
+            SKIP_GPU=1
+            shift
+            ;;
+        apt|yum|pacman|yay|paru)
+            PKG_MGR="$1"
+            shift
+            ;;
+        *)
+            echo "✗ 未知参数: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
 
 echo "================================"
 echo "LLaMA-Factory Docker 环境检查与配置"
@@ -299,6 +325,9 @@ if [ -z "$PKG_MGR" ]; then
         exit 1
     fi
     echo "✓ 检测到发行版: $DISTRO"
+    if [ "$SKIP_GPU" -eq 1 ]; then
+        echo "⚠ 检测到 --cpu 标志：将跳过 GPU 相关依赖与检测"
+    fi
 else
     # 使用指定的包管理器
     echo -e "\n[步骤 0/5] 使用指定的包管理器: $PKG_MGR"
@@ -320,6 +349,9 @@ else
     fi
     
     echo "✓ 使用发行版类型: $DISTRO (包管理器: $PKG_MGR)"
+    if [ "$SKIP_GPU" -eq 1 ]; then
+        echo "⚠ 检测到 --cpu 标志：将跳过 GPU 相关依赖与检测"
+    fi
 fi
 
 # 根据发行版安装基础依赖
@@ -352,45 +384,53 @@ fi
 
 # 检查 NVIDIA 驱动
 echo -e "\n[步骤 3/5] 检查 NVIDIA 驱动..."
-if command -v nvidia-smi &> /dev/null; then
-    echo "✓ NVIDIA 驱动已安装"
-    nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+if [ "$SKIP_GPU" -eq 1 ]; then
+    echo "⚠ 跳过 NVIDIA 驱动检测（--cpu 指定）"
 else
-    echo "⚠ 未检测到 NVIDIA 驱动"
-    echo "如需 GPU 支持，请先安装 NVIDIA 驱动"
-    echo "安装指南:"
-    echo "  Ubuntu: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html"
-    echo "  CentOS: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html"
-    echo "  Arch:   https://wiki.archlinux.org/title/NVIDIA"
+    if command -v nvidia-smi &> /dev/null; then
+        echo "✓ NVIDIA 驱动已安装"
+        nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+    else
+        echo "⚠ 未检测到 NVIDIA 驱动"
+        echo "如需 GPU 支持，请先安装 NVIDIA 驱动"
+        echo "安装指南:"
+        echo "  Ubuntu: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html"
+        echo "  CentOS: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html"
+        echo "  Arch:   https://wiki.archlinux.org/title/NVIDIA"
+    fi
 fi
 
 # 检查和安装 nvidia-container-toolkit
 echo -e "\n[步骤 4/5] 检查 nvidia-container-toolkit..."
-if command -v nvidia-container-toolkit &> /dev/null; then
-    echo "✓ nvidia-container-toolkit 已安装"
-    nvidia-container-toolkit --version
-    
-    # 如果 NVIDIA 驱动已安装，确保配置也已完成
-    if command -v nvidia-smi &> /dev/null; then
-        echo "正在验证 Docker NVIDIA Runtime 配置..."
-        configure_docker_nvidia
-    fi
+if [ "$SKIP_GPU" -eq 1 ]; then
+    echo "⚠ 跳过 nvidia-container-toolkit 检查/安装（--cpu 指定）"
 else
-    # 如果已安装 NVIDIA 驱动，则必须安装 nvidia-container-toolkit
-    if command -v nvidia-smi &> /dev/null; then
-        echo "检测到 NVIDIA 驱动已安装，必须安装 nvidia-container-toolkit..."
-        if install_nvidia_container_toolkit_with_retry "$DISTRO"; then
-            echo "✓ nvidia-container-toolkit 安装成功"
+    if command -v nvidia-container-toolkit &> /dev/null; then
+        echo "✓ nvidia-container-toolkit 已安装"
+        nvidia-container-toolkit --version
+
+        # 如果 NVIDIA 驱动已安装，确保配置也已完成
+        if command -v nvidia-smi &> /dev/null; then
+            echo "正在验证 Docker NVIDIA Runtime 配置..."
             configure_docker_nvidia
-        else
-            echo "✗ nvidia-container-toolkit 安装失败"
-            echo "请手动安装 nvidia-container-toolkit"
-            echo "参考文档: https://github.com/NVIDIA/nvidia-container-toolkit"
-            exit 1
         fi
     else
-        echo "⚠ 未检测到 NVIDIA 驱动，跳过 nvidia-container-toolkit 安装"
-        echo "如需 GPU 支持，请先安装 NVIDIA 驱动后重新运行此脚本"
+        # 如果已安装 NVIDIA 驱动，则必须安装 nvidia-container-toolkit
+        if command -v nvidia-smi &> /dev/null; then
+            echo "检测到 NVIDIA 驱动已安装，必须安装 nvidia-container-toolkit..."
+            if install_nvidia_container_toolkit_with_retry "$DISTRO"; then
+                echo "✓ nvidia-container-toolkit 安装成功"
+                configure_docker_nvidia
+            else
+                echo "✗ nvidia-container-toolkit 安装失败"
+                echo "请手动安装 nvidia-container-toolkit"
+                echo "参考文档: https://github.com/NVIDIA/nvidia-container-toolkit"
+                exit 1
+            fi
+        else
+            echo "⚠ 未检测到 NVIDIA 驱动，跳过 nvidia-container-toolkit 安装"
+            echo "如需 GPU 支持，请先安装 NVIDIA 驱动后重新运行此脚本"
+        fi
     fi
 fi
 

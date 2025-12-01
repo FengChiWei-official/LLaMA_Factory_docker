@@ -3,6 +3,22 @@
 
 set -e
 
+# 支持 --cpu （使用 CPU compose 文件）
+CPU_MODE=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --cpu)
+            CPU_MODE=1
+            shift
+            ;;
+        *)
+            echo "✗ 未知参数: $1"
+            echo "用法: bash scripts/train_example.sh [--cpu]"
+            exit 1
+            ;;
+    esac
+done
+
 echo "================================"
 echo "LLaMA-Factory 训练示例"
 echo "================================"
@@ -10,7 +26,7 @@ echo "================================"
 # 检查容器是否在运行
 if ! docker ps --format '{{.Names}}' | grep -q '^llama-factory$'; then
     echo "✗ 容器 llama-factory 未在运行"
-    echo "请先执行: bash scripts/start_docker.sh"
+    echo "请先执行: bash scripts/start_docker.sh [--cpu]"
     exit 1
 fi
 
@@ -18,6 +34,9 @@ echo -e "\n[1/3] 等待容器就绪..."
 sleep 5
 
 echo -e "\n[2/3] 检查WebUI..."
+if [ "$CPU_MODE" -eq 1 ]; then
+    echo "⚠ 当前为 CPU 模式 (compose: docker-compose-cpu.yml)"
+fi
 if curl -s http://localhost:7860 > /dev/null; then
     echo "✓ WebUI 已就绪"
 else

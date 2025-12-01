@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  llama-factory:
+    image: hiyouga/llamafactory:latest
+    container_name: llama-factory
+    environment:
+      - PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+    
+    ports:
+      - "7860:7860"
+    
+    volumes:
+      # 数据集挂载
+      - ./data:/app/data
+      # 输出模型挂载
+      - ./output:/app/output
+      # 预加载模型挂载
+      - ./models:/app/models
+    
+    shm_size: 16gb
+    
+    # CPU 模式不使用 NVIDIA runtime 或设备预留
+    
+    command: llamafactory-cli webui
+    
+    # 自动重启
+    restart: unless-stopped
