@@ -53,6 +53,10 @@ output/
 
 # Large dataset directories (ignored by default)
 medical_ds/
+medical_ds/medical_train.json
+*.json
+*.csv 
+*.bak
 
 # Allow data/ but ignore large generated files
 data/*.bin
