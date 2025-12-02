@@ -1,11 +1,7 @@
-version: '3.8'
-
 services:
   llama-factory:
     image: hiyouga/llamafactory:latest
     container_name: llama-factory
-    runtime: nvidia
-    
     environment:
       - PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
       - NVIDIA_VISIBLE_DEVICES=all
@@ -24,6 +20,8 @@ services:
     
     shm_size: 16gb
     
+    # 如果系统支持，使用 deploy.resources.reservations.devices 来声明 GPU 需求
+    # 注意：某些旧的 docker-compose 版本对此不兼容；推荐使用 `docker compose` 插件
     deploy:
       resources:
         reservations:
@@ -31,6 +29,11 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    
+    # If you need GPU access, prefer using the newer "docker compose" plugin or a newer
+    # docker-compose that supports device requests. The legacy compose file versions
+    # may not support GPU device reservations. Remove or replace the block above
+    # with an appropriate device request if your environment supports it.
     
     command: llamafactory-cli webui
     
