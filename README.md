@@ -87,6 +87,34 @@ A: 确认已修改dataset_info.json并刷新WebUI
 ### Q: Docker无法调用GPU
 A: 检查是否安装了nvidia-container-toolkit
 
+## 脚本使用：无需手动设置 PYTHONPATH
+
+项目中包含一个用于批量检测/转换文件编码的脚本：`scripts/convert_encoding_cli.py`。
+为了方便在仓库根目录直接运行，脚本在启动时会把项目根加入 `sys.path`，因此你可以直接运行：
+
+```bash
+# dry-run（只检测并打印，不修改文件）
+python3 scripts/convert_encoding_cli.py --root medical_ds/samples --target utf-8 --dry-run
+
+# 真正执行并在修改前创建备份
+python3 scripts/convert_encoding_cli.py --root medical_ds/samples --target utf-8 --backup
+```
+
+如果你更喜欢通过 Makefile 来调用（更简洁），仓库根还包含一个 `Makefile`（见下），可直接运行对应目标。
+
+Makefile 示例（可传参）:
+
+```bash
+# 默认使用仓库中的 medical_ds/samples
+make convert-dry
+
+# 指定自定义目录或文件，例如直接传入 medical_ds
+make convert-dry ROOT=medical_ds TARGET=utf-8
+
+# 真正执行并创建备份
+make convert-run ROOT=medical_ds TARGET=utf-8
+```
+
 ## 许可证
 
 MIT License
