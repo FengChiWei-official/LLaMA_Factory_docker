@@ -9,9 +9,20 @@ echo "================================"
 
 # 检查容器是否在运行
 if ! docker ps --format '{{.Names}}' | grep -q '^llama-factory$'; then
-    echo "✗ 容器 llama-factory 未在运行"
-    echo "请先执行: bash scripts/start_docker.sh"
-    exit 1
+    # 如果未通过 docker ps 找到，尝试用 docker compose 查询（如果可用）
+    if docker compose version >/dev/null 2>&1 && [ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/docker-compose.yml" ]; then
+        if docker compose -f "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/docker-compose.yml" ps --services --filter "status=running" | grep -q '^llama-factory$'; then
+            echo "✓ llama-factory 服务正在运行 (via docker compose)"
+        else
+            echo "✗ 容器/服务 llama-factory 未在运行"
+            echo "请先执行: bash scripts/start_docker.sh"
+            exit 1
+        fi
+    else
+        echo "✗ 容器 llama-factory 未在运行"
+        echo "请先执行: bash scripts/start_docker.sh"
+        exit 1
+    fi
 fi
 
 echo -e "\n[1/3] 等待容器就绪..."

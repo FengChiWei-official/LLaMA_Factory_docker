@@ -24,6 +24,7 @@ show_help() {
 选项:
     -h, --help          显示此帮助信息
     apt                 使用 apt 包管理器 (Debian/Ubuntu)
+    ubuntu20            强制使用 Ubuntu 20.04 的安装/配置路径（无重启）
     yum                 使用 yum 包管理器 (CentOS/RHEL)
     pacman              使用 pacman 包管理器 (Arch Linux)
     yay                 使用 yay AUR 助手 (Arch Linux)
@@ -45,6 +46,10 @@ resolve_distro_from_pkgmgr() {
     local pkgmgr=$1
     case $pkgmgr in
         apt)
+            echo "debian"
+            ;;
+        ubuntu20)
+            # 逻辑上仍视为 debian 系列，但脚本会记录 Ubuntu 20 特殊标志
             echo "debian"
             ;;
         yum)
@@ -74,6 +79,10 @@ detect_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         if [[ "$ID" =~ ^(ubuntu|debian)$ ]]; then
+            # 对 Ubuntu 进一步检测版本号（例如 20.04）
+            if [[ "$ID" == "ubuntu" ]]; then
+                UBUNTU_VERSION="$VERSION_ID"
+            fi
             echo "debian"
         elif [[ "$ID" == "centos" ]] || [[ "$ID_LIKE" =~ rhel ]]; then
             echo "redhat"
@@ -94,6 +103,7 @@ install_deps_debian() {
     sudo apt-get update
     
     echo "安装必要依赖..."
+    # 使用官方 docker 包或系统包，确保 docker service 被启用
     sudo apt-get install -y \
         docker.io \
         docker-compose \
@@ -103,6 +113,10 @@ install_deps_debian() {
         gnupg \
         lsb-release \
         software-properties-common
+
+    # 启动并启用 Docker 服务（无需重启系统）
+    sudo systemctl enable --now docker || true
+    echo "✓ Docker 服务已启用/启动（如未运行已尝试启动）"
 }
 
 # CentOS/RHEL 系统依赖安装
@@ -187,14 +201,19 @@ install_nvidia_container_toolkit_with_retry() {
         case $distro in
             debian)
                 echo "为 Debian/Ubuntu 安装 nvidia-container-toolkit（尝试 $((retry_count + 1))/$max_retries）..."
-                if distribution=$(. /etc/os-release; echo $ID$VERSION_ID) && \
-                   curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add - 2>/dev/null && \
-                   curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
-                   sudo tee /etc/apt/sources.list.d/nvidia-docker.list > /dev/null && \
-                   sudo apt-get update && \
-                   sudo apt-get install -y nvidia-container-toolkit; then
-                    echo "✓ nvidia-container-toolkit 安装成功"
-                    return 0
+                if distribution=$(. /etc/os-release; echo $ID$VERSION_ID); then
+                    echo "使用 distribution=$distribution 添加 NVIDIA docker 仓库并安装（若可用）..."
+                    # 对于 Ubuntu 20/22 等，使用官方脚本添加源并安装；不执行系统重启，仅重启 docker
+                    if curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add - 2>/dev/null && \
+                       curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+                       sudo tee /etc/apt/sources.list.d/nvidia-docker.list > /dev/null && \
+                       sudo apt-get update && \
+                       sudo apt-get install -y nvidia-container-toolkit; then
+                        echo "✓ nvidia-container-toolkit 安装成功（已尝试不重启）"
+                        # 重启 docker 服务使变更生效（不重启主机）
+                        sudo systemctl restart docker || true
+                        return 0
+                    fi
                 fi
                 ;;
             redhat)
@@ -313,6 +332,20 @@ else
     
     # 将包管理器转换为发行版类型
     DISTRO=$(resolve_distro_from_pkgmgr "$PKG_MGR")
+    # 如果用户指定 ubuntu20，尝试记录 Ubuntu 版本信息用于后续逻辑
+    if [ "$PKG_MGR" = "ubuntu20" ]; then
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            UBUNTU_VERSION="$VERSION_ID"
+            echo "注意: 指定 ubuntu20，检测到系统版本为: $ID $VERSION_ID"
+            if [[ "$ID" != "ubuntu" ]]; then
+                echo "⚠ 警告: 系统非 Ubuntu，但使用了 ubuntu20 参数；将继续按 Debian/Ubuntu 路径执行。"
+            fi
+        else
+            echo "⚠ 无法读取 /etc/os-release 以验证 Ubuntu 版本，继续按 Ubuntu20 处理。"
+            UBUNTU_VERSION="20.04"
+        fi
+    fi
     if [ "$DISTRO" = "unknown" ]; then
         echo "✗ 无法识别的包管理器: $PKG_MGR"
         show_help

@@ -8,6 +8,22 @@ DATA_DIR="${PROJECT_DIR}/data"
 OUTPUT_DIR="${PROJECT_DIR}/output"
 MODELS_DIR="${PROJECT_DIR}/models"
 
+# 选择使用的 compose 命令：优先使用 `docker compose`（插件），否则回退到 `docker-compose`
+choose_compose_cmd() {
+    if docker compose version >/dev/null 2>&1; then
+        echo "docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        echo "docker-compose"
+    else
+        echo "";
+    fi
+}
+COMPOSE_CMD=$(choose_compose_cmd)
+if [ -z "$COMPOSE_CMD" ]; then
+    echo "错误: 未检测到 'docker compose' 插件或 'docker-compose' 二进制。请先安装 Docker Compose。"
+    exit 1
+fi
+
 echo "================================"
 echo "启动 LLaMA-Factory Docker 容器"
 echo "================================"
@@ -28,13 +44,16 @@ if [ ! -d "$MODELS_DIR" ]; then
     mkdir -p "$MODELS_DIR"
 fi
 
-# 尝试登入
-docker login
-echo -e "\n使用官方 LLaMA-Factory 镜像..."
+# 可选尝试登录（交互式）
+if command -v docker &> /dev/null; then
+    echo "检测到 Docker，若需私有仓库镜像请先登录（按 Ctrl+C 跳过）..."
+    docker login || true
+fi
 
+echo -e "\n使用 compose 命令: $COMPOSE_CMD"
 echo -e "\n启动容器..."
-docker-compose -f "$PROJECT_DIR/docker-compose.yml" down
-docker-compose -f "$PROJECT_DIR/docker-compose.yml" up -d
+$COMPOSE_CMD -f "$PROJECT_DIR/docker-compose.yml" down || true
+$COMPOSE_CMD -f "$PROJECT_DIR/docker-compose.yml" up -d
 
 echo -e "\n================================"
 echo "✓ 容器启动成功！"
