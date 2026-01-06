@@ -60,3 +60,4 @@ medical_ds/medical_train.json
 
 # Allow data/ but ignore large generated files
 data/*.bin
+saves/*

@@ -2,21 +2,30 @@ services:
   llama-factory:
     image: hiyouga/llamafactory:latest
     container_name: llama-factory
+    network_mode: host
     environment:
       - PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+      # Hugging Face mirror to speed up/avoid blocked downloads
+      - HF_ENDPOINT=https://hf-mirror.com
+      # Reuse host caches to avoid re-downloading models
+      - HF_HOME=/root/.cache/huggingface
+      - HF_HUB_CACHE=/root/.cache/huggingface
+      - MODELSCOPE_CACHE=/root/.cache/modelscope
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    
-    ports:
-      - "7860:7860"
     
     volumes:
       # 数据集挂载
       - ./data:/app/data
       # 输出模型挂载
-      - ./output:/app/output
+      #- ./output:/app/output
+      # checkpoint挂载
+      - ./saves:/app/saves
       # 预加载模型挂载
       - ./models:/app/models
+      # 复用宿主机缓存，避免重复下载
+      - /data/.cache/hf:/root/.cache/huggingface
+      - /data/.cache/modelscope:/root/.cache/modelscope
     
     shm_size: 16gb
     

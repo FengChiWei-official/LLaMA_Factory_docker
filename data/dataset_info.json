@@ -13,5 +13,13 @@
       "query": "input",
       "response": "output"
     }
+  },
+  "medical_ds_cleaned": {
+    "file_name": "medical_ds_cleaned.json",
+    "columns": {
+      "prompt": "instruction",
+      "query": "input",
+      "response": "output"
+    }
   }
 }
