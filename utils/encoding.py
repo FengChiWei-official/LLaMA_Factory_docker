@@ -1,3 +1,36 @@
+def detect_encoding(data: bytes) -> str:
+	"""从字节数据中检测编码，并处理末尾截断（unexpected end of data）的情况。"""
+	if not data:
+		return 'utf-8'
+
+	# 1. BOM 检查
+	boms = [
+		(b'\xff\xfe\x00\x00', 'utf-32-le'),
+		(b'\x00\x00\xfe\xff', 'utf-32-be'),
+		(b'\xff\xfe', 'utf-16-le'),
+		(b'\xfe\xff', 'utf-16-be'),
+		(b'\xef\xbb\xbf', 'utf-8-sig'),
+	]
+	for bom, enc in boms:
+		if data.startswith(bom):
+			return enc
+
+	# 2. 尝试常见编码
+	# 顺序很重要：utf-8 优先，然后是中文编码，最后是西文编码
+	candidates = ('utf-8', 'gb18030', 'gbk', 'big5', 'iso-8859-1', 'cp1252')
+	for enc in candidates:
+		try:
+			data.decode(enc)
+			return enc
+		except UnicodeDecodeError as e:
+			# 如果报错是因为数据末尾截断（常见的 partial read 导致），
+			# 则认为该编码是匹配的。
+			if e.reason == 'unexpected end of data':
+				return enc
+			continue
+	return 'latin1'
+
+
 def switch_encoding(path: str, coding: str):
 	"""自动检测给定文件的编码并转换为目标编码。
 
@@ -13,6 +46,7 @@ def switch_encoding(path: str, coding: str):
 	实现细节/策略：
 	- 先以二进制读取文件，检查常见 BOM（UTF-8/16/32）。
 	- 若无 BOM，尝试按顺序用常见编码解码（utf-8, gb18030, gbk, big5, iso-8859-1, cp1252）。
+	- 改进：支持检测被截断的 multi-byte 序列（如 utf-8 尾部字符不全）。
 	- 若解码成功，则认为该编码为源编码；否则回退到 'latin1' 作为最终兜底（不会抛异常）。
 	- 若源编码与目标编码等价（包括 utf-8 与 utf-8-sig 的简单归一化），则不修改文件并返回。
 	- 写入是原子性的：先写入临时文件，再用 os.replace 覆盖原文件，保持权限不变。
@@ -24,40 +58,7 @@ def switch_encoding(path: str, coding: str):
 	with open(path, 'rb') as f:
 		data = f.read()
 
-	# 常见 BOM 与对应编码
-	boms = [
-		(b'\xff\xfe\x00\x00', 'utf-32-le'),
-		(b'\x00\x00\xfe\xff', 'utf-32-be'),
-		(b'\xff\xfe', 'utf-16-le'),
-		(b'\xfe\xff', 'utf-16-be'),
-		(b'\xef\xbb\xbf', 'utf-8-sig'),
-	]
-
-	src_enc = None
-	for bom, enc in boms:
-		if data.startswith(bom):
-			src_enc = enc
-			break
-
-	# 如果没有 BOM，尝试一系列常见编码
-	if not src_enc:
-		# 首先尝试严格的 utf-8
-		try:
-			data.decode('utf-8')
-			src_enc = 'utf-8'
-		except Exception:
-			# 常见候选编码顺序
-			candidates = ('utf-8', 'gb18030', 'gbk', 'big5', 'iso-8859-1', 'cp1252')
-			for enc in candidates:
-				try:
-					data.decode(enc)
-					src_enc = enc
-					break
-				except Exception:
-					continue
-			else:
-				# 最后兜底
-				src_enc = 'latin1'
+	src_enc = detect_encoding(data)
 
 	# 归一化判断：使 utf-8 与 utf-8-sig 这类被视为等价
 	def _norm(enc: str) -> str:
@@ -127,40 +128,11 @@ def switch_encoding_stream(path: str, coding: str, sample_size: int = 65536, chu
 	import os
 	import codecs
 
-	# 读取样本并检测编码（与 switch_encoding 保持一致的策略）
+	# 读取样本并检测编码（使用统一的 detect_encoding 处理截断）
 	with open(path, 'rb') as f:
 		sample = f.read(sample_size)
 
-	# BOM 检测
-	boms = [
-		(b'\xff\xfe\x00\x00', 'utf-32-le'),
-		(b'\x00\x00\xfe\xff', 'utf-32-be'),
-		(b'\xff\xfe', 'utf-16-le'),
-		(b'\xfe\xff', 'utf-16-be'),
-		(b'\xef\xbb\xbf', 'utf-8-sig'),
-	]
-
-	src_enc = None
-	for bom, enc in boms:
-		if sample.startswith(bom):
-			src_enc = enc
-			break
-
-	if not src_enc:
-		try:
-			sample.decode('utf-8')
-			src_enc = 'utf-8'
-		except Exception:
-			candidates = ('utf-8', 'gb18030', 'gbk', 'big5', 'iso-8859-1', 'cp1252')
-			for enc in candidates:
-				try:
-					sample.decode(enc)
-					src_enc = enc
-					break
-				except Exception:
-					continue
-			else:
-				src_enc = 'latin1'
+	src_enc = detect_encoding(sample)
 
 	def _norm(enc: str) -> str:
 		if not enc:

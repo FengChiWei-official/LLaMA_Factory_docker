@@ -1,0 +1,25 @@
+输入目录: /mnt/e77f048c-5db8-4441-83e7-ae589a3a68f4/Downloads/FcwsRepo/LLaMA_Factory_docker/raw_dataset/csvs/medical_ds
+输出文件: data/OAGD_ds.json
+模板文件: /mnt/e77f048c-5db8-4441-83e7-ae589a3a68f4/Downloads/FcwsRepo/LLaMA_Factory_docker/raw_dataset/templates/medical_ds_template.json
+日志文件: /mnt/e77f048c-5db8-4441-83e7-ae589a3a68f4/Downloads/FcwsRepo/LLaMA_Factory_docker/data/processing_log.txt
+
+✓ 模板已加载
+✓ 找到 1 个 CSV 文件
+  - OAGD_妇产科/妇产科6-28000.csv
+
+处理: OAGD_妇产科/妇产科6-28000.csv [utf-8]
+  ✓ 成功转换 183751 条记录
+
+正在写入 JSON 文件...
+✓ JSON 文件已生成: data/OAGD_ds.json
+
+==================================================
+处理完成！
+  总输入文件数: 1
+  总成功记录数: 183751
+  总错误记录数: 0
+  输出文件: data/OAGD_ds.json
+==================================================
+
+详细统计:
+  OAGD_妇产科/妇产科6-28000.csv                            [utf-8       ]   183751 条

@@ -16,6 +16,8 @@ _project_root = os.path.abspath(os.path.join(_here, '..'))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+from utils.encoding import detect_encoding
+
 
 UTF8_ALIASES = {
     'utf-8',
@@ -55,14 +57,7 @@ def load_template(template_path: str) -> str:
 def detect_file_encoding(file_path: str) -> str:
     with open(file_path, 'rb') as f:
         raw_data = f.read(10240)
-
-    for enc in ['utf-8', 'gbk', 'gb18030', 'big5', 'iso-8859-1']:
-        try:
-            raw_data.decode(enc)
-            return enc
-        except Exception:
-            continue
-    return 'utf-8'
+    return detect_encoding(raw_data)
 
 
 def ensure_utf8_file(path: str, repair_hint: str) -> str:
@@ -213,6 +208,7 @@ def build_dataset_info(main_name: str, output_path: str, extra_entries: List[Tup
     dataset_info = {
         main_name: {
             'file_name': os.path.basename(output_path),
+            'formatting': 'alpaca',
             'columns': {
                 'prompt': 'instruction',
                 'query': 'input',
@@ -224,6 +220,7 @@ def build_dataset_info(main_name: str, output_path: str, extra_entries: List[Tup
     for name, path in extra_entries:
         dataset_info[name] = {
             'file_name': os.path.basename(path),
+            'formatting': 'alpaca',
             'columns': {
                 'prompt': 'instruction',
                 'query': 'input',

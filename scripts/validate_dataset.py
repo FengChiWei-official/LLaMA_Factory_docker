@@ -41,7 +41,8 @@ def validate_dataset_info(config_path: str) -> bool:
                 print(f'✗ columns 应该是字典')
                 return False
             
-            required_columns = ['prompt', 'query', 'response']
+            # 必需字段：prompt 和 response。query 是可选的。
+            required_columns = ['prompt', 'response']
             for col in required_columns:
                 if col not in dataset_config['columns']:
                     print(f'✗ columns 中缺少字段: {col}')
@@ -55,42 +56,67 @@ def validate_dataset_info(config_path: str) -> bool:
         return False
 
 
-def validate_jsonl_file(jsonl_path: str, dataset_name: str, column_mapping: dict, sample_size: int = 5) -> tuple:
+def validate_data_file(file_path: str, dataset_name: str, column_mapping: dict, sample_size: int = 5) -> tuple:
     """
-    验证 JSONL 文件的有效性
+    验证数据文件（支持 JSON 数组和 JSONL 格式）
     
     返回: (valid, total_records, valid_records, sample_records)
     """
-    print(f'\n验证 {dataset_name} JSONL 文件...')
+    print(f'\n验证 {dataset_name} 数据文件...')
     
     try:
         total_records = 0
         valid_records = 0
         sample_records = []
         
-        with open(jsonl_path, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                if not line.strip():
-                    continue
-                
-                total_records += 1
-                
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            
+            if content.startswith('['):
+                # 处理标准 JSON 数组
                 try:
-                    record = json.loads(line)
+                    data = json.loads(content)
+                    if not isinstance(data, list):
+                        print(f'✗ JSON 格式错误: 根节点不是数组')
+                        return False, 0, 0, []
                     
-                    # 检查必需的列
-                    source_cols = list(column_mapping.values())
-                    if all(col in record for col in source_cols):
-                        valid_records += 1
-                        
-                        if len(sample_records) < sample_size:
-                            sample_records.append(record)
-                    else:
-                        missing = [col for col in source_cols if col not in record]
-                        print(f'  行 {line_num}: 缺少字段 {missing}')
-                        
+                    total_records = len(data)
+                    # 只有在 mapping 中定义的列才视为必需
+                    source_cols = [v for k, v in column_mapping.items() if v]
+                    
+                    for idx, record in enumerate(data):
+                        if all(col in record for col in source_cols):
+                            valid_records += 1
+                            if len(sample_records) < sample_size:
+                                sample_records.append(record)
+                        else:
+                            if valid_records < 3: # 减少大文件的报错输出
+                                missing = [col for col in source_cols if col not in record]
+                                print(f'  记录 {idx}: 缺少字段 {missing}')
                 except json.JSONDecodeError as e:
-                    print(f'  行 {line_num}: JSON 格式错误 - {e}')
+                    print(f'✗ JSON 解析失败: {e}')
+                    return False, 0, 0, []
+            else:
+                # 处理 JSONL
+                f.seek(0)
+                for line_num, line in enumerate(f, 1):
+                    if not line.strip():
+                        continue
+                    total_records += 1
+                    try:
+                        record = json.loads(line)
+                        # 只有在 mapping 中定义的列才视为必需
+                        source_cols = [v for k, v in column_mapping.items() if v]
+                        if all(col in record for col in source_cols):
+                            valid_records += 1
+                            if len(sample_records) < sample_size:
+                                sample_records.append(record)
+                        else:
+                            if valid_records < 3:
+                                missing = [col for col in source_cols if col not in record]
+                                print(f'  行 {line_num}: 缺少字段 {missing}')
+                    except json.JSONDecodeError as e:
+                        print(f'  行 {line_num}: JSON 格式错误 - {e}')
         
         if total_records == 0:
             print(f'✗ 文件为空或无有效记录')
@@ -98,8 +124,7 @@ def validate_jsonl_file(jsonl_path: str, dataset_name: str, column_mapping: dict
         
         valid_ratio = valid_records / total_records * 100
         print(f'✓ 验证完成: {valid_records:,}/{total_records:,} 条有效记录 ({valid_ratio:.1f}%)')
-        
-        return total_records > 0, total_records, valid_records, sample_records
+        return valid_records > 0, total_records, valid_records, sample_records
         
     except Exception as e:
         print(f'✗ 验证失败: {e}')
@@ -116,9 +141,14 @@ def show_sample_data(samples: list, column_mapping: dict):
     
     for i, sample in enumerate(samples, 1):
         print(f'\n【样本 {i}】')
-        print(f'指令: {sample.get(column_mapping["prompt"], "N/A")[:100]}...')
-        print(f'输入: {sample.get(column_mapping["query"], "N/A")[:100]}...')
-        print(f'输出: {sample.get(column_mapping["response"], "N/A")[:100]}...')
+        # 使用 .get 处理可能缺失的映射键
+        prompt_key = column_mapping.get("prompt")
+        query_key = column_mapping.get("query")
+        response_key = column_mapping.get("response")
+        
+        print(f'指令: {sample.get(prompt_key, "N/A")[:100] if prompt_key else "N/A"}...')
+        print(f'输入: {sample.get(query_key, "N/A")[:100] if query_key else "N/A"}...')
+        print(f'输出: {sample.get(response_key, "N/A")[:100] if response_key else "N/A"}...')
     
     print('\n' + '=' * 80)
 
@@ -148,8 +178,8 @@ def main():
             print(f'\n✗ 文件不存在: {jsonl_path}')
             continue
         
-        # 验证 JSONL 文件
-        valid, total, valid_records, samples = validate_jsonl_file(
+        # 验证文件格式
+        valid, total, valid_records, samples = validate_data_file(
             jsonl_path,
             dataset_name,
             dataset_config['columns'],

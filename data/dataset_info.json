@@ -1,21 +1,25 @@
 {
   "identity": {
     "file_name": "identity.json",
+    "formatting": "alpaca",
     "columns": {
       "prompt": "instruction",
       "response": "output"
     }
   },
-  "my_custom_dataset": {
-    "file_name": "my_data.json",
+
+  "medical_ds_cleaned": {
+    "file_name": "medical_ds_cleaned.json",
+    "formatting": "alpaca",
     "columns": {
       "prompt": "instruction",
       "query": "input",
       "response": "output"
     }
   },
-  "medical_ds_cleaned": {
-    "file_name": "medical_ds_cleaned.json",
+  "OAGD_ds": {
+    "file_name": "OAGD_ds.json",
+    "formatting": "alpaca",
     "columns": {
       "prompt": "instruction",
       "query": "input",

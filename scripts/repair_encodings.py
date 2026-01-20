@@ -27,40 +27,20 @@ _project_root = os.path.abspath(os.path.join(_here, '..'))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from utils.encoding import switch_encoding, switch_encoding_stream
+from utils.encoding import detect_encoding, switch_encoding, switch_encoding_stream
 
 
 def normalize_encoding(name: Optional[str]) -> str:
     return (name or '').replace('-', '').lower()
 
 
-def detect_encoding(path: str) -> str:
+def detect_file_encoding(path: str) -> str:
     with open(path, 'rb') as f:
-        data = f.read()
-
-    boms = [
-        (b'\xff\xfe\x00\x00', 'utf-32-le'),
-        (b'\x00\x00\xfe\xff', 'utf-32-be'),
-        (b'\xff\xfe', 'utf-16-le'),
-        (b'\xfe\xff', 'utf-16-be'),
-        (b'\xef\xbb\xbf', 'utf-8-sig'),
-    ]
-    for bom, enc in boms:
-        if data.startswith(bom):
-            return enc
-
-    try:
-        data.decode('utf-8')
-        return 'utf-8'
-    except Exception:
-        candidates = ('utf-8', 'gb18030', 'gbk', 'big5', 'iso-8859-1', 'cp1252')
-        for enc in candidates:
-            try:
-                data.decode(enc)
-                return enc
-            except Exception:
-                continue
-    return 'latin1'
+        # For repair script, we can afford reading a bit more for accuracy
+        # or just read the whole thing if it's not massive, but let's stick to a large buffer
+        # detect_encoding already handles the truncation.
+        data = f.read(1024 * 1024) # 1MB is plenty for detection
+    return detect_encoding(data)
 
 
 def iter_files(root: str, exts: Optional[Iterable[str]]) -> List[str]:
@@ -77,7 +57,7 @@ def iter_files(root: str, exts: Optional[Iterable[str]]) -> List[str]:
 
 
 def convert_file(path: str, target: str, use_stream: bool, stream_threshold: int, backup: bool) -> Tuple[str, bool]:
-    src_enc = detect_encoding(path)
+    src_enc = detect_file_encoding(path)
     if normalize_encoding(src_enc) == normalize_encoding(target):
         return src_enc, False
 
@@ -125,7 +105,7 @@ def main() -> int:
             rel = path
 
         if args.dry_run:
-            src_enc = detect_encoding(path)
+            src_enc = detect_file_encoding(path)
             print(f'[DRY] {rel}: {src_enc} -> {args.target}')
             continue
 
